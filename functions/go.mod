@@ -1,10 +1,10 @@
-module example.com/entrevista
+module example.com/functions
 
 go 1.24.0
 
+replace example.com/models => ../models/
+
 require (
-	example.com/functions v0.0.0-00010101000000-000000000000
-	example.com/helpers v0.0.0-00010101000000-000000000000
 	example.com/models v0.0.0-00010101000000-000000000000
 	github.com/gin-gonic/gin v1.10.0
 )
@@ -37,9 +37,3 @@ require (
 	google.golang.org/protobuf v1.34.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace example.com/models => ./models/
-
-replace example.com/helpers => ./helpers/
-
-replace example.com/functions => ./functions/
