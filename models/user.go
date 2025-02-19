@@ -24,5 +24,6 @@ func(u *User) GetCleanUser() CleanUser {
     Country 	: u.Country,
     Email 	: u.Email,
     Uuid 	: u.Login.Uuid,
+    Age 	: u.Dob.Age,
   }
 }

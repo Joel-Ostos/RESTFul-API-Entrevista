@@ -1,11 +1,12 @@
 package functions
 
 import (
-	"net/http"
-	"sync"
-	"example.com/models"
-	"github.com/gin-gonic/gin"
-	"fmt"
+  "time"
+  "net/http"
+  "sync"
+  "example.com/models"
+  "github.com/gin-gonic/gin"
+  "fmt"
 )
 
 const limit = 5000
@@ -17,6 +18,7 @@ func GetUsersHandler(c *gin.Context) {
     UsersMap: make(map[string]models.CleanUser, targetUsers),
     Wg: &sync.WaitGroup{},
     Mu: &sync.Mutex{},
+    Time: time.Now(),
     Err: nil,
   }
   fmt.Println("Fetching users")
@@ -27,9 +29,11 @@ func GetUsersHandler(c *gin.Context) {
     c.JSON(http.StatusInternalServerError, gin.H{"error": client.Err.Error()})
     return
   }
+
   for _, user := range client.UsersMap {
     ResponseResult.Users = append(ResponseResult.Users, user)
-    //ResponseResult.UsersPerCountry[user.Country]++
+    ResponseResult.UsersPerCountry = make(map[string]int, 30)
+    ResponseResult.UsersPerCountry[user.Country]++
     ResponseResult.AverageAge += float64(user.Age)
     if user.Gender == "female" {
       ResponseResult.WomenUsers++ 
@@ -43,7 +47,10 @@ func GetUsersHandler(c *gin.Context) {
 
 func FetchUsers(client *models.ClientRequest) {
   for i := 0; i < targetUsers; i += limit {
-    fmt.Println("Dentro")
+    //fmt.Println("Dentro")
+    if client.Err != nil {
+      return
+    }
     client.Wg.Add(1)
     if targetUsers - len(client.UsersMap) < limit {
       go generate(client, targetUsers - len(client.UsersMap))
@@ -55,7 +62,6 @@ func FetchUsers(client *models.ClientRequest) {
 }
 
 func generate(client *models.ClientRequest, limit int)  {
-  client.Mu.Lock()
   defer client.Wg.Done()
   cant := 0
   for cant < limit {
@@ -70,12 +76,13 @@ func generate(client *models.ClientRequest, limit int)  {
       CleanUsers = append(CleanUsers, user.GetCleanUser())
     }
     for _, user := range CleanUsers {
+      client.Mu.Lock()
       if _, exists := client.UsersMap[user.Uuid]; exists {
 	continue
       }
       client.UsersMap[user.Uuid] = user
+      client.Mu.Unlock()
       cant++
     }
   }
-  client.Mu.Unlock()
 }
