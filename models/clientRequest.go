@@ -6,7 +6,7 @@ import (
 )
 
 type ClientRequest struct {
-  UsersMap map[string]CleanUser 
+  UsersMap map[string]bool 
   Wg *sync.WaitGroup
   Mu *sync.Mutex
   Time time.Time

@@ -1,0 +1,1 @@
+![Esquema](./img/Esquema.png)
