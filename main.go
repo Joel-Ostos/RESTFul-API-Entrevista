@@ -16,78 +16,95 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
+
 	"github.com/gin-gonic/gin"
 )
 
 type User struct {
-  Gender 		string `json:"gender"`
-  Name struct  {
-    First 		string `json:"first"`
-    Last 		string `json:"last"`
-  } 			       `json:"name"`
-  Email 		string `json:"email"`
-  Country 		string `json:"country"`
-  City 			string `json:"city"`
-  Login struct {
-    Uuid 		string `json:"uuid"`
-  } 			       `json:"login"`
+	Gender  string `json:"gender"`
+	Name    struct {
+		First string `json:"first"`
+		Last  string `json:"last"`
+	} `json:"name"`
+	Email   string `json:"email"`
+	Country string `json:"country"`
+	City    string `json:"city"`
+	Login   struct {
+		Uuid string `json:"uuid"`
+	} `json:"login"`
 }
 
 type ResultsAPI struct {
-  Results []User `json:"results"`
+	Results []User `json:"results"`
 }
 
 type Response struct {
-  Users 		[]User
-  UsersPerCountry 	map[string]int
-  Men 			int
-  Women 		int
+	Users           []User         `json:"users"`
+	UsersPerCountry map[string]int `json:"users_per_country"`
+	Men             int            `json:"men"`
+	Women           int            `json:"women"`
 }
 
 const url string = "https://randomuser.me/api/?results=5000"
+const totalUsers int = 15000
+const numGoroutines int = 3
 
-func fetchUsers(result *Response, Users *map[string]User) {
-  cant := 0
-  for cant < 15000 {
-    resp, err := http.Get(url)
-    var tempUsers ResultsAPI
-    if err != nil {
-      return 
-    }
-    json.NewDecoder(resp.Body).Decode(&tempUsers)
-    fillMap(&cant, result, &tempUsers.Results, Users)
-  }
+func fetchUsers(result *Response, users map[string]User, wg *sync.WaitGroup, mu *sync.Mutex) {
+	defer wg.Done()
+	for len(result.Users) < totalUsers/numGoroutines {
+		resp, err := http.Get(url)
+		if err != nil {
+		  log.Printf("Error en la solicitud HTTP: %v", err)
+		  return
+		}
+		var tempUsers ResultsAPI
+		if err := json.NewDecoder(resp.Body).Decode(&tempUsers); err != nil {
+		  log.Printf("Error decodificando la respuesta: %v", err)
+		  continue
+		}
+		fillMap(result, &tempUsers.Results, users, mu)
+	}
 }
 
-func fillMap(cant *int, result *Response, tempUsers *[]User, Users *map[string]User) {
-  for i := 0; i < len((*tempUsers)); i++ {
-    _, exists := (*Users)[(*tempUsers)[i].Login.Uuid] 
-    if !exists {
-      (*cant)++
-      (*Users)[(*tempUsers)[i].Login.Uuid] = (*tempUsers)[i]
-      result.UsersPerCountry[(*tempUsers)[i].Country]++
-      if (*tempUsers)[i].Gender == "female" {
-	result.Women++
-      } else {
-	result.Men++
-      }
-      result.Users = append(result.Users, (*tempUsers)[i])
-    }
-  }
+func fillMap(result *Response, tempUsers *[]User, users map[string]User, mu *sync.Mutex) {
+	mu.Lock()
+	defer mu.Unlock()
+	for _, user := range *tempUsers {
+		if _, exists := users[user.Login.Uuid]; !exists {
+			users[user.Login.Uuid] = user
+			result.UsersPerCountry[user.Country]++
+			if user.Gender == "female" {
+				result.Women++
+			} else {
+				result.Men++
+			}
+			result.Users = append(result.Users, user)
+		}
+	}
 }
 
 func usersHandler(g *gin.Context) {
-  var result Response
-  result.UsersPerCountry = make(map[string]int, 100)
-  var Users  = make(map[string]User, 15000)
-  fetchUsers(&result, &Users)
-  g.JSON(http.StatusOK, result)
+	var result Response
+	result.UsersPerCountry = make(map[string]int)
+
+	users := make(map[string]User)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	wg.Add(numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		go fetchUsers(&result, users, &wg, &mu)
+	}
+	wg.Wait()
+
+	g.JSON(http.StatusOK, result)
 }
 
 func main() {
-  r := gin.Default()
-  r.GET("/users", usersHandler)
-  if err := r.Run(":8080"); err != nil {
-    log.Fatal(err)
-  }
+	r := gin.Default()
+	r.GET("/users", usersHandler)
+	if err := r.Run(":8080"); err != nil {
+		log.Fatal(err)
+	}
 }
